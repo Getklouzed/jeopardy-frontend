@@ -1235,7 +1235,7 @@ return (
         </div>
 
 
-        
+
         {/*-----------------NEXT STAGE BUTTON--------------------*/}
        {isHost && showNextStageButton && (
          <div style={{ textAlign: "center", marginTop: "20px" }}>
