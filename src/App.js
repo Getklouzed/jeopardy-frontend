@@ -3,7 +3,9 @@ import "./App.css";
 import { io } from "socket.io-client";
 
 // ==================== Socket Connection ====================
-const socket = io("https://jeopardy-backend.onrender.com");
+const socket = io("https://jeopardy-backend.onrender.com", {
+  transports: ["websocket"], // force websocket
+});
 
 
 // ==================== Helpers ====================
