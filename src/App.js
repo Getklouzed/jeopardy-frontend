@@ -1235,31 +1235,7 @@ return (
         </div>
 
 
-        {/* ---------- Debug Button (Host Only) ---------- */}
-       /* {isHost && (
-          <div style={{ textAlign: "center", marginTop: "10px" }}>
-            <button
-              onClick={() => {
-                // mark all cells as asked
-                setBoardPlayable((prev) =>
-                  prev.map((col) => ({
-                    ...col,
-                    questions: col.questions.map((q) => ({ ...q, asked: true })),
-                  }))
-                );
-                setShowNextStageButton(true); // show the next stage button immediately
-              }}
-              style={{
-                backgroundColor: "orange",
-                color: "white",
-                padding: "5px 10px",
-                marginBottom: "10px",
-              }}
-            >
-              Debug: Open All Cells
-            </button>
-          </div>
-        )} */
+        
         {/*-----------------NEXT STAGE BUTTON--------------------*/}
        {isHost && showNextStageButton && (
          <div style={{ textAlign: "center", marginTop: "20px" }}>
