@@ -22,17 +22,8 @@ const generateEmptyBoard = (categories, pointsArray) => {
     })),
   }));
 };
-const generatePlayableBoard = (boardData) => {
-  return boardData.map((cat) => ({
-    category: cat.category,
-    questions: cat.questions.map((q) => ({
-      points: q.points,
-      asked: false, // all questions start unasked
-      content: { ...q.content },
-      answer: q.answer,
-    })),
-  }));
-};
+
+
 
 
 // ==================== MediaItem Component ====================
@@ -213,11 +204,59 @@ function App() {
   const [playerScores, setPlayerScores] = useState([]);
   const [currentQuestion, setCurrentQuestion] = useState(null);
   const [showAnswer, setShowAnswer] = useState(false);
+  const [debugMode, setDebugMode] = useState(false);
+  const [debugOpen, setDebugOpen] = useState(false); // is the debug panel expanded
+  const [debugMinimized, setDebugMinimized] = useState(false);
+  const [activeDebugTool, setActiveDebugTool] = useState(null); // 'debugMode', 'colorGold', 'resetColor', etc.
+
+  const [tempScores, setTempScores] = useState([]);
+
+
 
   const [roomCode, setRoomCode] = useState(null);
   const [joinName, setJoinName] = useState("");
   const [joinCode, setJoinCode] = useState("");
   const [isHost, setIsHost] = useState(false);
+/*------------playable Board----------------*/
+const generatePlayableBoard = (boardData, stage = "normal") => {
+  const newBoard = boardData.map((cat) => ({
+    category: cat.category,
+    questions: cat.questions.map((q) => ({
+      points: q.points,
+      asked: false, // all questions start unasked
+      content: { ...q.content },
+      answer: q.answer,
+      isGolden: false, // default
+    })),
+  }));
+  // Only host sees golden cells
+  if (!isHost) return newBoard;
+
+  // Assign golden cells based on stage
+  if (stage === "normal") {
+    // 1 golden cell randomly
+    const catIndex = Math.floor(Math.random() * newBoard.length);
+    const qIndex = Math.floor(Math.random() * newBoard[catIndex].questions.length);
+    newBoard[catIndex].questions[qIndex].isGolden = true;
+  } else if (stage === "double") {
+    // 2 golden cells randomly
+    for (let i = 0; i < 2; i++) {
+      let catIndex, qIndex;
+      do {
+        catIndex = Math.floor(Math.random() * newBoard.length);
+        qIndex = Math.floor(Math.random() * newBoard[catIndex].questions.length);
+      } while (newBoard[catIndex].questions[qIndex].isGolden); // avoid duplicates
+      newBoard[catIndex].questions[qIndex].isGolden = true;
+    }
+  }
+
+  return newBoard;
+};
+/*----------end of playable board--------------------*/
+
+
+
+
 
   const [editingCell, setEditingCell] = useState(null);
 
@@ -604,20 +643,46 @@ const updatePlayerScore = (playerId, points) => {
    setNumPlayers(val);
    if (roomCode) updateRoomLimit(val);
  };
-
 const handleCellClick = (catIndex, rowIndex) => {
   const question = boardPlayable[catIndex].questions[rowIndex];
   if (question.asked) return;
 
+  if (activeDebugTool === "colorGold") {
+    const newBoard = [...boardPlayable];
+    newBoard[catIndex].questions[rowIndex].isGolden = true;
+    setBoardPlayable(newBoard);
+    return; // skip normal click
+  }
+
+  if (activeDebugTool === "resetColor") {
+    const newBoard = [...boardPlayable];
+    newBoard[catIndex].questions[rowIndex].isGolden = false;
+    setBoardPlayable(newBoard);
+    return; // skip normal click
+  }
+
+
+  // Update host board
   const newBoard = [...boardPlayable];
   newBoard[catIndex].questions[rowIndex].asked = true;
   setBoardPlayable(newBoard);
 
-  // Broadcast to all clients (to mark question as asked)
-  socket.emit("cellClicked", { roomCode, catIndex, rowIndex });
+  // Emit to all clients so players see the greyed-out cell
+  socket.emit("cellClicked", { roomCode, colIndex: catIndex, rowIndex });
 
-  // Host opens modal via selectQuestion
-  selectQuestion(catIndex, rowIndex, question);
+
+  // Only open modal for host if NOT in debug mode
+  if (isHost && !debugMode) {
+    selectQuestion(catIndex, rowIndex, question);
+  }
+};
+
+//-------Cell Color Management--------------
+const getCellColor = (q) => {
+  if (q.asked && q.isGolden) return "#daa520"; // clicked golden cell
+  if (q.asked) return "#999";                  // regular clicked
+  if (q.isGolden && isHost) return "gold";     // unclicked golden, host only
+  return "#61dafb";                            // default
 };
 
 
@@ -813,8 +878,7 @@ const renderPlayableBoard = (boardData, isDouble) => {
                     border: "1px solid black",
                     padding: "20px",
                     cursor: disabled ? "default" : "pointer",
-                    backgroundColor: q.asked ? "#999" : "#61dafb",
-                    textAlign: "center",
+                    backgroundColor: getCellColor(q),
                     verticalAlign: "middle",
                     height: "80px",
                     width: "150px",
@@ -822,11 +886,7 @@ const renderPlayableBoard = (boardData, isDouble) => {
                   onClick={() => {
                     if (disabled) return;
 
-                    // Emit to server: marks question as asked and opens modal for all
-                    socket.emit("cellClicked", { roomCode, colIndex, rowIndex });
-                    selectQuestion(colIndex, rowIndex, q);
-
-                    // Host cannot mark board locally; server will broadcast updates
+                    handleCellClick(colIndex, rowIndex);
                   }}
                 >
                   {q.points}
@@ -840,7 +900,6 @@ const renderPlayableBoard = (boardData, isDouble) => {
   );
 };
 
-console.log("Current player scores:", playerScores);
 // ==================== JSX ====================
 return (
   <>
@@ -871,7 +930,7 @@ return (
               Use Local Backend
             </button>
           </div>
-         
+
 
 
           {/* Player Limit + Create Room */}
@@ -1269,6 +1328,172 @@ return (
       <div>
         <h2>Jeopardy Game</h2>
 
+        {/*debug panel*/}
+        {isHost && (
+          <div
+            style={{
+              position: "fixed",
+              top: 10,
+              right: 10,
+              width: debugOpen ? "220px" : "60px",
+              background: "#f0f0f0",
+              border: "1px solid #ccc",
+              borderRadius: "8px",
+              overflow: "hidden",
+              transition: "all 0.3s ease",
+              zIndex: 1000,
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                background: "#ddd",
+                padding: "5px 10px",
+                fontWeight: "bold",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                cursor: "pointer",
+              }}
+              onClick={() => setDebugOpen(!debugOpen)}
+            >
+              <span>Debug Tools</span>
+              <button
+                style={{ fontSize: "12px", padding: "0 5px" }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDebugMinimized(!debugMinimized);
+                }}
+              >
+                {debugMinimized ? "▲" : "▼"}
+              </button>
+            </div>
+
+            {/* Body */}
+            {debugOpen && !debugMinimized && (
+              <div style={{ padding: "10px" }}>
+                {/* Debug Mode toggle */}
+                <button
+                  onClick={() =>
+                    setActiveDebugTool(activeDebugTool === "debugMode" ? null : "debugMode")
+                  }
+                  style={{
+                    marginBottom: "5px",
+                    width: "100%",
+                    backgroundColor: activeDebugTool === "debugMode" ? "green" : "red",
+                    color: "#fff",
+                  }}
+                >
+                  Debug Mode {activeDebugTool === "debugMode" ? "ON" : "OFF"}
+                </button>
+
+                {/* Color Cell Gold toggle */}
+                <button
+                  onClick={() =>
+                    setActiveDebugTool(activeDebugTool === "colorGold" ? null : "colorGold")
+                  }
+                  style={{
+                    marginBottom: "5px",
+                    width: "100%",
+                    backgroundColor: activeDebugTool === "colorGold" ? "green" : "red",
+                    color: "#fff",
+                  }}
+                >
+                  Color Cell Gold {activeDebugTool === "colorGold" ? "ON" : "OFF"}
+                </button>
+
+                {/* Reset Cell Color toggle */}
+                <button
+                  onClick={() =>
+                    setActiveDebugTool(activeDebugTool === "resetColor" ? null : "resetColor")
+                  }
+                  style={{
+                    marginBottom: "5px",
+                    width: "100%",
+                    backgroundColor: activeDebugTool === "resetColor" ? "green" : "red",
+                    color: "#fff",
+                  }}
+                >
+                  Reset Cell Color {activeDebugTool === "resetColor" ? "ON" : "OFF"}
+                </button>
+              </div>
+            )}
+
+          </div>
+        )}
+
+
+
+
+
+         {/*Host Free score*/}
+         {isHost && (
+           <div
+             style={{
+               position: "fixed",
+               bottom: 10,
+               left: 10,
+               background: "#eee",
+               padding: "10px",
+               borderRadius: "5px",
+               zIndex: 1000,
+               maxHeight: "300px",
+               overflowY: "auto",
+             }}
+           >
+             <h4>Edit Player Points</h4>
+             {playerScores.map((p, idx) => (
+               <div key={p.id} style={{ marginBottom: "5px", display: "flex", alignItems: "center" }}>
+                 <span style={{ flex: 1 }}>{p.name}:</span>
+                 <input
+                   type="text"
+                   value={tempScores[idx] ?? p.score.toString()} // tempScores holds typed values
+                   onChange={(e) => {
+                     let val = e.target.value;
+
+                     // Limit to 6 characters
+                     if (val.length > 6) return;
+
+                     // Allow only digits and optional leading '-'
+                     if (!/^(-?\d*)$/.test(val)) return;
+
+                     const newTemp = [...tempScores];
+                     newTemp[idx] = val;
+                     setTempScores(newTemp);
+                   }}
+                   style={{ width: "60px" }}
+                 />
+
+               </div>
+             ))}
+             <button
+               onClick={() => {
+                 // Confirm changes safely
+                 const newScores = [...playerScores]; // start from existing scores
+                 tempScores.forEach((val, idx) => {
+                   const parsed = parseInt(val, 10);
+                   if (!isNaN(parsed)) {
+                     newScores[idx].score = parsed;
+                   }
+                   // if empty or invalid, keep the original score
+                 });
+                 setPlayerScores(newScores);
+                 setTempScores([]); // reset temp
+                 // Emit the new scores to server
+                     socket.emit("updateScores", { roomCode, scores: newScores });
+               }}
+               style={{ marginTop: "5px", width: "100%" }}
+             >
+               Confirm
+             </button>
+
+           </div>
+         )}
+
+
+
+
+
         {/* Scores */}
         <div style={{ display: "flex", marginTop: "20px" }}>
           <div style={{ width: "200px" }}>
@@ -1293,9 +1518,16 @@ return (
            <button
              onClick={() => {
                if (!currentStage || currentStage === "normal") {
-                 // Advance to Double Jeopardy using the prepped host board
-                 socket.emit("advanceStage", { roomCode, currentStage: "double", boardPlayable: boardDouble });
-                 setBoardPlayable(boardDouble); // host sees the correct board
+                 // Generate double jeopardy board with golden cells
+                 const doubleBoardPlayable = generatePlayableBoard(boardDouble, "double");
+
+                 // Emit to clients and update host board
+                 socket.emit("advanceStage", {
+                   roomCode,
+                   currentStage: "double",
+                   boardPlayable: doubleBoardPlayable,
+                 });
+                 setBoardPlayable(doubleBoardPlayable);
                  setCurrentStage("double");
                } else {
                  // Advance to Final Jeopardy
@@ -1308,6 +1540,7 @@ return (
            >
              {currentStage === "normal" ? "Go to Double Jeopardy" : "Go to Final Jeopardy"}
            </button>
+
          </div>
        )}
 
