@@ -3,7 +3,7 @@ import "./App.css";
 import { io } from "socket.io-client";
 
 // ==================== Socket Connection ====================
-const socket = io("https://jeopardy-backend-fkxg.onrender.com");
+//const socket = io("https://jeopardy-backend-fkxg.onrender.com");
 
 
 
@@ -187,6 +187,21 @@ const MediaItem = ({ type, url }) => {
 
 // ==================== Main App ====================
 function App() {
+
+  // ---------- Socket Server ----------
+  const defaultServer = "https://jeopardy-backend-fkxg.onrender.com";
+  const [serverUrl, setServerUrl] = useState(defaultServer);
+  const [socket, setSocket] = useState(null);
+
+  useEffect(() => {
+    if (socket) socket.disconnect();
+    const s = io(serverUrl, { transports: ["websocket"] });
+    setSocket(s);
+
+    return () => s.disconnect();
+  }, [serverUrl]);
+
+
   // ---------- State ----------
   const [page, setPage] = useState("home");
   const [numPlayers, setNumPlayers] = useState(2);
@@ -216,7 +231,7 @@ function App() {
   const [playerAnswers, setPlayerAnswers] = useState({});
   const [showFinalQuestion, setShowFinalQuestion] = useState(false); // NEW
   const [selectedPlayer, setSelectedPlayer] = useState("");
-  const [tempWager, setTempWager] = useState(playerWagers[socket.id] ?? "");
+  const [tempWager, setTempWager] = useState(""); // start empty
 
 
   const [finalResults, setFinalResults] = useState([]);
@@ -320,6 +335,9 @@ const submitWager = () => {
 
 // ---------- Socket Events ----------
 useEffect(() => {
+    if (!socket) return;
+
+
   // Update player list
   socket.on("updatePlayers", (players) => setPlayers(players));
 
@@ -443,11 +461,12 @@ socket.on("finalJeopardyCategory", ({ category }) => {
     socket.off("finalAnswerUpdate");
     socket.off("finalResults");
   };
-}, []); // empty dependency array ensures listeners attach once
+}, [socket]);
 
 
 // ---------- Check if board is complete to show next stage button ----------
 useEffect(() => {
+   if (!socket) return; // <-- VERY IMPORTANT
   if (!boardPlayable || boardPlayable.length === 0) return;
 
   const boardComplete = boardPlayable.every(cat =>
@@ -455,10 +474,18 @@ useEffect(() => {
   );
 
   setShowNextStageButton(boardComplete);
-}, [boardPlayable]);
+}, [boardPlayable,socket]);
 
 // ---------- wagers -----------
 useEffect(() => {
+  if (!socket) return;
+
+  setTempWager(playerWagers[socket.id] ?? "");
+}, [socket, playerWagers]);
+
+
+useEffect(() => {
+   if (!socket) return;
   const handleUpdateFinalWagers = (data) => {
     setFinalWagers(data.finalWagers);
     setAllWagersSubmitted(data.allSubmitted);
@@ -469,7 +496,9 @@ useEffect(() => {
   return () => {
     socket.off("updateFinalWagers", handleUpdateFinalWagers);
   };
-}, []);
+}, [socket]);
+
+
 
 
   // ---------- Room Functions ----------
@@ -821,7 +850,29 @@ return (
       {/* ================= HOME PAGE ================= */}
       {page === "home" && (
         <>
+
           <h1>Jeopardy Game</h1>
+
+          {/* ================= Server Switch ================= */}
+          <div style={{ margin: "10px 0" }}>
+            <label>
+              Backend URL:
+              <input
+                type="text"
+                value={serverUrl}
+                onChange={(e) => setServerUrl(e.target.value)}
+                style={{ width: "400px", marginLeft: "10px" }}
+              />
+            </label>
+            <button onClick={() => setServerUrl("https://jeopardy-backend-fkxg.onrender.com")}>
+              Use Render Backend
+            </button>
+            <button onClick={() => setServerUrl("http://localhost:4000")}>
+              Use Local Backend
+            </button>
+          </div>
+         
+
 
           {/* Player Limit + Create Room */}
           <div style={{ marginBottom: "10px" }}>
