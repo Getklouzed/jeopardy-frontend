@@ -672,7 +672,7 @@ const handleCellClick = (catIndex, rowIndex) => {
 
 
   // Only open modal for host if NOT in debug mode
-  if (isHost && !debugMode) {
+  if (isHost && activeDebugTool !== "debugMode") {
     selectQuestion(catIndex, rowIndex, question);
   }
 };
@@ -1418,7 +1418,6 @@ return (
                 </button>
               </div>
             )}
-
           </div>
         )}
 
