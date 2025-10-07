@@ -78,101 +78,105 @@ const MediaItem = ({ type, url }) => {
 };
 
 
-    const QuestionModal = ({
-      question,
-      roomCode,
-      revealAnswer,
-      allocatePoints,
-      closeModal,
-      players,
-      isHost
-    }) => {
-      if (!question) return null;
+const QuestionModal = ({
+  question,
+  roomCode,
+  revealAnswer,
+  allocatePoints,
+  closeModal,
+  players,
+  isHost
+}) => {
+  // Host sees answer immediately, players wait for reveal
+  const [showAnswerForHost, setShowAnswerForHost] = useState(false);
 
-      // read showAnswer directly from question object
-      const showAnswer = question.showAnswer;
+  useEffect(() => {
+    if (!question) return;
+    if (isHost) {
+      setShowAnswerForHost(true);
+    } else {
+      setShowAnswerForHost(false);
+    }
+  }, [question, isHost]);
+  
+  if (!question) return null;
 
-      return (
-        <div
-          style={{
-            position: "fixed",
-            top: 0, left: 0,
-            width: "100%", height: "100%",
-            backgroundColor: "rgba(0,0,0,0.5)",
-            display: "flex", justifyContent: "center", alignItems: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div
-            style={{
-              background: "white",
-              padding: "20px",
-              width: "400px",
-              maxHeight: "90%",
-              overflowY: "auto",
-              borderRadius: "8px",
-            }}
-          >
-            <h3>
-              {question.points} – {question.content.text || "No Text"}
-            </h3>
 
-            {["image", "video", "audio"].map((type) =>
-              question.content?.[type] ? (
-                <div key={type} style={{ marginBottom: "10px" }}>
-                  <strong>{type.toUpperCase()}:</strong>
-                  <MediaItem type={type} url={question.content[type]} />
-                </div>
-              ) : null
-            )}
 
-            {/* REVEAL ANSWER BUTTON (host only) */}
-            {!showAnswer && isHost && (
-              <button onClick={revealAnswer} style={{ marginTop: "10px" }}>
-                Reveal Answer
-              </button>
-            )}
+  // Players see answer only after server sets showAnswer
+  const showAnswerForPlayers = question.showAnswer;
 
-            {/* SHOW ANSWER */}
-            {showAnswer && (
-              <>
-                <p><strong>Answer:</strong> {question.answer}</p>
+  return (
+    <div style={{
+      position: "fixed",
+      top: 0, left: 0,
+      width: "100%", height: "100%",
+      backgroundColor: "rgba(0,0,0,0.5)",
+      display: "flex", justifyContent: "center", alignItems: "center",
+      zIndex: 1000,
+    }}>
+      <div style={{
+        background: "white",
+        padding: "20px",
+        width: "400px",
+        maxHeight: "90%",
+        overflowY: "auto",
+        borderRadius: "8px",
+      }}>
+        <h3>{question.points} – {question.content.text || "No Text"}</h3>
 
-                {/* ALLOCATE POINTS (host only) */}
-                {isHost && (
-                  <div style={{ marginTop: "10px" }}>
-                    <label>Allocate Points:</label>
-                    {players.map((p) => (
-                      <div key={p.id} style={{ marginBottom: "5px" }}>
-                        <span>{p.name}: </span>
-                        <button onClick={() => allocatePoints(p.id, question.points)}>
-                          +{question.points}
-                        </button>
-                        <button onClick={() => allocatePoints(p.id, -question.points)}>
-                          -{question.points}
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
+        {["image", "video", "audio"].map(type =>
+          question.content?.[type] ? (
+            <div key={type} style={{ marginBottom: "10px" }}>
+              <strong>{type.toUpperCase()}:</strong>
+              <MediaItem type={type} url={question.content[type]} />
+            </div>
+          ) : null
+        )}
 
-                {/* CLOSE BUTTON (host only) */}
-                {isHost && (
-                  <button
-                    onClick={() => closeModal()}
-                    style={{ marginTop: "10px", backgroundColor: "#ccc" }}
-                  >
-                    Close
-                  </button>
-                )}
+        {/* REVEAL ANSWER BUTTON (host only) */}
+        {!question.showAnswer && isHost && (
+          <button onClick={revealAnswer} style={{ marginTop: "10px" }}>
+            Reveal Answer
+          </button>
+        )}
 
-              </>
-            )}
+        {/* SHOW ANSWER */}
+        {(showAnswerForHost || showAnswerForPlayers) && (
+          <p><strong>Answer:</strong> {question.answer}</p>
+        )}
+
+        {/* ALLOCATE POINTS (host only, after reveal) */}
+        {isHost && showAnswerForPlayers && (
+          <div style={{ marginTop: "10px" }}>
+            <label>Allocate Points:</label>
+            {players.map(p => (
+              <div key={p.id} style={{ marginBottom: "5px" }}>
+                <span>{p.name}: </span>
+                <button onClick={() => allocatePoints(p.id, question.points)}>
+                  +{question.points}
+                </button>
+                <button onClick={() => allocatePoints(p.id, -question.points)}>
+                  -{question.points}
+                </button>
+              </div>
+            ))}
           </div>
-        </div>
-      );
-    };
+        )}
 
+        {/* CLOSE BUTTON (host only, after reveal) */}
+        {isHost && showAnswerForPlayers && (
+          <button
+            onClick={() => closeModal()}
+            style={{ marginTop: "10px", backgroundColor: "#ccc" }}
+          >
+            Close
+          </button>
+        )}
+      </div>
+    </div>
+  );
+};
 
 
 
