@@ -919,7 +919,7 @@ return (
               <input
                 type="text"
                 value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
+                onChange={(e) => setServerUrl(e.target.value.replace(/\s+/g, ""))}
                 style={{ width: "400px", marginLeft: "10px" }}
               />
             </label>
@@ -1306,15 +1306,21 @@ return (
               onChange={(e) => setJoinName(e.target.value)}
             />
           </div>
-          <div style={{ marginBottom: "10px" }}>
-            <label>Room Code: </label>
-            <input
-              type="text"
-              value={joinCode}
-              onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-              maxLength={6}
-            />
-          </div>
+            <div style={{ marginBottom: "10px" }}>
+              <label>Room Code: </label>
+              <input
+                type="text"
+                value={joinCode}
+                onChange={(e) => {
+                  const cleaned = e.target.value
+                    .replace(/[^A-Za-z0-9]/g, "") // remove everything except letters & numbers
+                    .toUpperCase()
+                    .slice(0, 6); // enforce max 6 chars AFTER cleaning
+                  setJoinCode(cleaned);
+                }}
+              />
+            </div>
+
           <button onClick={joinRoom}>Join</button>
           <button onClick={() => setPage("home")} style={{ marginLeft: "10px" }}>
             ⬅ Back
